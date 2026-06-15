@@ -117,6 +117,10 @@ class PlaybackMixin:
                     if sa.chemin and Path(sa.chemin).is_file():
                         audio.append((start + sa.debut, str(sa.chemin),
                                       max(0.0, sa.volume)))
+                    elif sa.chemin:
+                        self.q.put(f"   ⚠ sample introuvable (scène "
+                                   f"{indices[idx] + 1}) : {sa.chemin}\n"
+                                   "      → réaffecte-le dans le panneau Sample.\n")
                 plan_scenes.append({"idx": indices[idx], "start": start,
                                     "duree": duree})
                 start += duree

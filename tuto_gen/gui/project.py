@@ -127,6 +127,7 @@ class ProjectMixin:
         self.base_dir = Path(bd) if bd else Path.home()
         pp = st.get("project_path")
         self.project_path = Path(pp) if pp else None
+        self._reparer_samples_manquants()
         self.current = min(max(0, int(st.get("current", 0))), len(self.scenes) - 1)
         self._sel = None
         self._charger_meta()
@@ -178,6 +179,7 @@ class ProjectMixin:
         self.scenes = cfg.scenes
         self.base_dir = cfg.base_dir
         self.project_path = Path(chemin)
+        self._reparer_samples_manquants()
         self.current = 0 if self.scenes else None
         self._sel = None
         self._charger_meta()
@@ -240,6 +242,55 @@ class ProjectMixin:
         except Exception as e:
             self._log(f"   ⚠ copie dans le projet impossible : {e}\n")
             return str(chemin)
+
+    def _chemin_sample_stable(self, chemin) -> str:
+        """Pérennise le chemin d'un sample pris dans la bibliothèque livrée (★).
+
+        Les samples livrés résident sous `sys._MEIPASS/assets/samples`, un
+        chemin volatile : il change à chaque build et, sur macOS, à chaque
+        lancement de l'app non signée (App Translocation). Le référencer
+        directement fait « disparaître » le son à la relecture comme à la
+        génération (le fichier n'existe plus à ce chemin → piste ignorée).
+        On copie donc le fichier dans la bibliothèque utilisateur
+        (~/.tuto-gen/samples), stable et inscriptible, et on renvoie ce
+        chemin pérenne. Les autres sources sont renvoyées telles quelles."""
+        livres = settings.samples_livres()
+        if not (livres and chemin):
+            return str(chemin)
+        try:
+            Path(chemin).resolve().relative_to(Path(livres).resolve())
+        except (ValueError, OSError):
+            return str(chemin)  # pas un sample livré → rien à pérenniser
+        try:
+            dest = settings.dossier_samples(self.reglages)
+            return str(paquet.adopter_fichier(dest, chemin))
+        except Exception as e:
+            self._log(f"   ⚠ copie du sample livré impossible : {e}\n")
+            return str(chemin)
+
+    def _reparer_samples_manquants(self):
+        """Re-cible les samples dont le fichier a disparu vers un même nom
+        retrouvé dans la bibliothèque (livrés ★ + dossier perso).
+
+        Soigne les projets enregistrés avec un ancien chemin volatile de
+        sample livré (cf. `_chemin_sample_stable`) : sans cela, le son reste
+        muet jusqu'à réaffectation manuelle. Sans effet si rien n'est cassé."""
+        biblio = None
+        repares = 0
+        for s in self.scenes:
+            for sa in s.samples:
+                if not sa.chemin or Path(sa.chemin).is_file():
+                    continue
+                if biblio is None:
+                    biblio = {p.name: p for p in settings.lister_samples(self.reglages)}
+                trouve = biblio.get(Path(sa.chemin).name)
+                if trouve is not None:
+                    sa.chemin = Path(self._chemin_sample_stable(trouve))
+                    self._sample_durees.pop(str(trouve), None)
+                    repares += 1
+        if repares:
+            self._log(f"   ↺ {repares} sample(s) manquant(s) re-localisé(s) "
+                      "depuis la bibliothèque.\n")
 
     def _enregistrer_yaml(self):
         f = filedialog.asksaveasfilename(

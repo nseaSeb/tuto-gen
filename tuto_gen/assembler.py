@@ -135,6 +135,8 @@ def _audio_scene(rendu: SceneRendue, duree: float, a_fermer: list):
 
     for sa in rendu.scene.samples:
         if not sa.chemin or not Path(sa.chemin).is_file():
+            if sa.chemin:
+                print(f"   ⚠ sample introuvable, ignoré : {sa.chemin}")
             continue
         ac = AudioFileClip(str(sa.chemin))
         a_fermer.append(ac)

@@ -1074,7 +1074,7 @@ class PanelsMixin:
         _remplir()
 
         def _assigner(chemin: Path):
-            chemin = Path(self._adopter(chemin))
+            chemin = Path(self._adopter(self._chemin_sample_stable(chemin)))
             sa.chemin = chemin
             self._sample_durees.pop(str(chemin), None)
             lbl_nm.config(text=Path(chemin).name, fg="#bbb")
