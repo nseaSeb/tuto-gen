@@ -30,6 +30,11 @@ numpy>=1.24
 coqui-tts>=0.27
 torchaudio
 torchcodec
+# spacy : requis par l'option « Fluidité » (enable_text_splitting de XTTS, qui
+# découpe le texte en phrases). Installé en transitif par coqui-tts mais déclaré
+# ici car le build l'embarque explicitement (cf. tuto-gen.spec). Aucun modèle de
+# langue à télécharger : XTTS n'utilise que le tokenizer de base.
+spacy>=3.7
 # Note : coqui-tts importe `transformers.pytorch_utils.isin_mps_friendly`,
 # retiré dans transformers 5.x ; tts.py réinjecte un shim de compatibilité.
 

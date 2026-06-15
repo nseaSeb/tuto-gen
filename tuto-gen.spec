@@ -31,6 +31,9 @@ for dist in [
     "coqui-tts", "coqui-tts-trainer", "librosa", "numba", "num2words",
     "tqdm", "regex", "filelock", "pyyaml", "soundfile",
     "flatbuffers", "protobuf", "pathvalidate",
+    # Fluidité (spacy) : catalogue résout ses registres via les entry-points
+    # déclarés dans les .dist-info → métadonnées requises au runtime.
+    "spacy", "thinc", "catalogue", "srsly",
 ]:
     try:
         datas += copy_metadata(dist)
@@ -52,6 +55,12 @@ _paquets = [
     "librosa",              # traitement audio coqui-tts
     "numba",                # accélération librosa
     "num2words",            # normalisation des nombres (coqui-tts)
+    # Option « Fluidité » : XTTS découpe le texte en phrases via spacy
+    # (enable_text_splitting). Importé paresseusement par TTS → invisible à
+    # l'analyse statique, d'où le collect_all explicite. thinc est son backend ML
+    # (extensions compilées) ; blis/cymem/preshed/murmurhash suivent comme deps.
+    "spacy",
+    "thinc",
     "ko_speech_tools",      # dépendance coqui-tts (sous-modules + data)
     "coqpit",               # config coqui-tts (paquet coqpit-config)
     "trainer",              # coqui-tts-trainer (importé par TTS)
@@ -141,13 +150,15 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    # Seule exclusion sûre : le backend Piper (non utilisé — XTTS-only) et son
-    # moteur onnxruntime (~62 Mo). NB : on NE peut PAS élaguer matplotlib /
-    # sklearn / babel : coqui-tts (TTS) les importe au chargement via des boucles
-    # d'import dynamiques (ex. TTS.vocoder.configs importe tous les configs →
-    # wavegrad → generic_utils → matplotlib ; librosa.decompose → sklearn).
-    excludes=["pytest", "kokoro", "misaki", "spacy", "thinc", "blis",
-              "piper_tts", "onnxruntime"],
+    # Exclusions sûres : le backend Piper (non utilisé — XTTS-only) et son
+    # moteur onnxruntime (~62 Mo). NB : spacy / thinc / blis NE sont PLUS exclus —
+    # ils sont requis par l'option « Fluidité » (enable_text_splitting de XTTS,
+    # qui découpe le texte en phrases via spacy ; cf. _paquets ci-dessus). De
+    # même on NE peut PAS élaguer matplotlib / sklearn / babel : coqui-tts (TTS)
+    # les importe au chargement via des boucles d'import dynamiques (ex.
+    # TTS.vocoder.configs → wavegrad → generic_utils → matplotlib ;
+    # librosa.decompose → sklearn).
+    excludes=["pytest", "kokoro", "misaki", "piper_tts", "onnxruntime"],
     noarchive=False,
     # NB : pas d'optimize=2 / -OO — cela supprime les docstrings, dont
     # transformers (XTTS) a besoin au runtime (sinon l'import de TTS échoue).
