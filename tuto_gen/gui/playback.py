@@ -249,7 +249,8 @@ class PlaybackMixin:
             else:
                 self.q.put("   (rien à synthétiser)\n")
         except Exception as e:
-            self.q.put(f"   ✗ {e}\n")
+            self._signaler_echec_tts(None, "Écoute de la narration", e,
+                                     notifier=True)
         self.q.put(("__ECOUTE__",))
 
     def _rafraichir_narr_dur(self):
@@ -279,15 +280,58 @@ class PlaybackMixin:
             pass
 
     def _set_cache_status(self, lbl, texte: str, couleur: str):
-        """Met à jour l'indicateur de cache (thread-safe via root.after)."""
+        """Met à jour l'indicateur de cache (thread-safe via root.after).
+
+        Réinitialise aussi un éventuel état « échec cliquable » posé par
+        `_signaler_echec_tts` (curseur main + clic), afin qu'un statut normal
+        (« ✓ audio prêt », « ⏳ génération… ») ne reste pas cliquable."""
         if lbl is None:
             return
         def _do():
             try:
                 if lbl.winfo_exists():
-                    lbl.config(text=texte, fg=couleur)
+                    lbl.config(text=texte, fg=couleur, cursor="")
+                    lbl.unbind("<Button-1>")
             except Exception:
                 pass
+        try:
+            self.root.after(0, _do)
+        except Exception:
+            pass
+
+    def _signaler_echec_tts(self, lbl, contexte: str, erreur,
+                            notifier: bool = False):
+        """Rend lisible l'échec d'une synthèse vocale (cf. demande : expliquer
+        *pourquoi* une narration échoue).
+
+        Le journal n'étant visible qu'en mode « Génération », on :
+          1. journalise la raison exacte ;
+          2. transforme l'indicateur de cache en bouton cliquable rouvrant la
+             raison complète dans une boîte de dialogue (consultable à tout
+             moment, même journal masqué) ;
+          3. affiche en plus une notification immédiate si `notifier` (pour les
+             actions explicites comme « Écouter », où l'utilisateur attend un
+             retour direct).
+        """
+        raison = str(erreur).strip() or erreur.__class__.__name__
+        self.q.put(f"   ✗ {contexte} : {raison}\n")
+
+        def _do():
+            if lbl is not None:
+                try:
+                    if lbl.winfo_exists():
+                        lbl.config(text="✗ échec — cliquer pour la raison",
+                                   fg="#c06060", cursor="hand2")
+                        lbl.unbind("<Button-1>")
+                        lbl.bind("<Button-1>", lambda _e: messagebox.showerror(
+                            "Échec de la génération de la narration",
+                            f"{contexte} :\n\n{raison}"))
+                except Exception:
+                    pass
+            if notifier:
+                messagebox.showerror(
+                    "Échec de la génération de la narration",
+                    f"{contexte} :\n\n{raison}")
         try:
             self.root.after(0, _do)
         except Exception:
@@ -337,8 +381,7 @@ class PlaybackMixin:
             # narration et redessine la timeline à leur longueur audio réelle.
             self._rafraichir_narr_dur()
         except Exception as e:
-            self.q.put(f"   ✗ échec mise en cache : {e}\n")
-            self._set_cache_status(status_lbl, "✗ échec de la génération", "#c06060")
+            self._signaler_echec_tts(status_lbl, "Mise en cache de l'audio", e)
 
     def _regenerer_narration(self, narration, status_lbl=None):
         """Force un nouveau take (XTTS étant stochastique) en invalidant le
@@ -363,8 +406,7 @@ class PlaybackMixin:
                 else:
                     self.q.put("   (rien à régénérer)\n")
             except Exception as e:
-                self.q.put(f"   ✗ échec régénération : {e}\n")
-                self._set_cache_status(status_lbl, "✗ échec", "#c06060")
+                self._signaler_echec_tts(status_lbl, "Régénération de l'audio", e)
         threading.Thread(target=work, daemon=True).start()
 
     def _play_sample(self, chemin):

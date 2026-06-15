@@ -362,7 +362,11 @@ def prechauffer(texte: str, ref_voix=None, speed: float = 1.0,
     Appelé au « blur » du champ narration pour que la génération de la vidéo
     réutilise un audio déjà prêt. Renvoie True si une synthèse a réellement eu
     lieu, False si rien à faire (texte vide, moteur absent, déjà en cache ou en
-    cours de synthèse)."""
+    cours de synthèse).
+
+    **Lève une exception si la synthèse elle-même échoue** : l'appelant peut
+    ainsi afficher la raison de l'échec à l'utilisateur (la synthèse silencieuse
+    masquait jadis l'erreur en renvoyant simplement False)."""
     texte = voix_texte.normaliser(texte, dico)
     if not texte or not _xtts_disponible():
         return False
@@ -377,8 +381,6 @@ def prechauffer(texte: str, ref_voix=None, speed: float = 1.0,
     try:
         _synth_cached(texte, ref, speed, temperature, fluidite, speaker)
         return True
-    except Exception:
-        return False
     finally:
         with _prewarm_lock:
             _prewarm_inflight.discard(key)
