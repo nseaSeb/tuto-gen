@@ -557,9 +557,10 @@ class PanelsMixin:
             row=9, column=1, columnspan=2, sticky="w")
 
         ttk.Separator(frm).grid(row=10, column=0, columnspan=3, sticky="we", pady=10)
-        ttk.Label(frm, text="Ces réglages voix sont mémorisés et réappliqués "
-                  "aux nouveaux projets. Vitesse/expressivité peuvent être "
-                  "surchargées par narration.", foreground="#888",
+        ttk.Label(frm, text="Ces réglages voix sont mémorisés et appliqués à "
+                  "tous les projets (y compris à la réouverture). "
+                  "Vitesse/expressivité peuvent être surchargées par narration.",
+                  foreground="#888",
                   wraplength=420).grid(row=11, column=0, columnspan=3, sticky="w")
         ttk.Button(frm, text="Fermer", command=_on_close).grid(
             row=12, column=2, sticky="e", pady=(12, 0))

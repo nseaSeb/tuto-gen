@@ -115,9 +115,29 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
         self._moteur_verifie = False
         self.root.after(400, self._verifier_moteur)
 
+    def _appliquer_reglages_voix(self, meta: config.Meta) -> config.Meta:
+        """Force les réglages voix globaux (popup 🎙) sur `meta`.
+
+        Source de vérité unique : les réglages globaux priment sur ceux figés
+        dans un projet chargé/restauré (sinon ils ne s'appliquaient qu'après
+        ouverture de la popup). Les surcharges par narration
+        (`Narration.vitesse`/`expressivite`) restent prioritaires au moment de
+        la synthèse (cf. `config.params_voix`)."""
+        r = self.reglages
+        meta.voix = r.voix
+        meta.voix_reference = (Path(r.voix_reference)
+                               if getattr(r, "voix_reference", None)
+                               and Path(r.voix_reference).is_file() else None)
+        meta.voix_speaker = getattr(r, "voix_speaker", "")
+        meta.voix_vitesse = getattr(r, "voix_vitesse", 1.0)
+        meta.voix_expressivite = getattr(r, "voix_expressivite", 0.75)
+        meta.voix_fluidite = getattr(r, "voix_fluidite", False)
+        meta.prononciations = dict(getattr(r, "prononciations", {}) or {})
+        return meta
+
     def _meta_par_defaut(self) -> config.Meta:
         r = self.reglages
-        return config.Meta(
+        meta = config.Meta(
             titre="Mon tutoriel",
             logo=Path(r.logo) if r.logo and Path(r.logo).is_file() else None,
             couleur_fond=r.couleur_fond,
@@ -127,21 +147,13 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
             degrade_sens=getattr(r, "degrade_sens", "vertical"),
             fond_image=(Path(r.fond_image)
                         if r.fond_image and Path(r.fond_image).is_file() else None),
-            voix=r.voix,
-            voix_reference=(Path(r.voix_reference)
-                            if getattr(r, "voix_reference", None)
-                            and Path(r.voix_reference).is_file() else None),
-            voix_speaker=getattr(r, "voix_speaker", ""),
-            voix_vitesse=getattr(r, "voix_vitesse", 1.0),
-            voix_expressivite=getattr(r, "voix_expressivite", 0.75),
-            voix_fluidite=getattr(r, "voix_fluidite", False),
-            prononciations=dict(getattr(r, "prononciations", {}) or {}),
             police=(Path(r.police)
                     if r.police and Path(r.police).is_file() else None),
             taille_base=getattr(r, "taille_base", 3.8),
             sous_titre_fond=getattr(r, "sous_titre_fond", "#000000"),
             sous_titre_fond_opacite=getattr(r, "sous_titre_fond_opacite", 0.55),
         )
+        return self._appliquer_reglages_voix(meta)
 
     def _taille_role(self, role: str) -> float:
         """Taille (% slide) d'un rôle, dérivée de la taille de base globale."""

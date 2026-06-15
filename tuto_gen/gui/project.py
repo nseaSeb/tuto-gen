@@ -118,6 +118,10 @@ class ProjectMixin:
         if not cfg.scenes:
             return False
         self.meta = cfg.meta
+        # Réglages voix globaux (popup 🎙) = source de vérité : on les réapplique
+        # au projet restauré (sinon ils ne prenaient effet qu'après ouverture de
+        # la popup).
+        self._appliquer_reglages_voix(self.meta)
         self.scenes = cfg.scenes
         bd = st.get("base_dir")
         self.base_dir = Path(bd) if bd else Path.home()
@@ -168,6 +172,9 @@ class ProjectMixin:
     def _charger_projet(self, cfg: config.Config, chemin):
         """Installe un `Config` chargé dans l'état de l'éditeur."""
         self.meta = cfg.meta
+        # Réglages voix globaux (popup 🎙) = source de vérité : ils priment sur
+        # ceux figés dans le projet ouvert.
+        self._appliquer_reglages_voix(self.meta)
         self.scenes = cfg.scenes
         self.base_dir = cfg.base_dir
         self.project_path = Path(chemin)
