@@ -128,6 +128,7 @@ class ProjectMixin:
         pp = st.get("project_path")
         self.project_path = Path(pp) if pp else None
         self._reparer_samples_manquants()
+        self._controle_assets()
         self.current = min(max(0, int(st.get("current", 0))), len(self.scenes) - 1)
         self._sel = None
         self._charger_meta()
@@ -180,6 +181,7 @@ class ProjectMixin:
         self.base_dir = cfg.base_dir
         self.project_path = Path(chemin)
         self._reparer_samples_manquants()
+        self._controle_assets()
         self.current = 0 if self.scenes else None
         self._sel = None
         self._charger_meta()
@@ -309,6 +311,34 @@ class ProjectMixin:
         if introuvables:
             self._log(f"   ⚠ {introuvables} sample(s) introuvable(s) dans la "
                       "bibliothèque — à réaffecter dans le panneau Sample.\n")
+
+    def _controle_assets(self):
+        """Signale à l'ouverture les assets référencés dont le fichier a disparu.
+
+        Couvre les assets *non-samples* (logo, image de fond, voix de référence,
+        police, captures), introuvables après coup faute de pouvoir les
+        re-localiser automatiquement comme les samples. But : que l'utilisateur
+        sache *avant* de générer ce qu'il doit réaffecter, plutôt que de
+        découvrir un logo ou un screenshot manquant dans la vidéo finale."""
+        manques = []  # (rôle lisible, nom de fichier)
+
+        def _verif(role, chemin):
+            if chemin and not Path(chemin).is_file():
+                manques.append((role, Path(chemin).name))
+
+        _verif("logo", self.meta.logo)
+        _verif("image de fond", self.meta.fond_image)
+        _verif("voix de référence", self.meta.voix_reference)
+        _verif("police", self.meta.police)
+        for i, s in enumerate(self.scenes, 1):
+            for c in s.captures:
+                _verif(f"capture (scène {i})", c.chemin)
+
+        if manques:
+            self._log(f"   ⚠ {len(manques)} asset(s) manquant(s) à l'ouverture :\n")
+            for role, nom in manques:
+                self._log(f"      • {role} : {nom}\n")
+            self._log("      → réaffecte-les avant de générer la vidéo.\n")
 
     def _enregistrer_yaml(self):
         f = filedialog.asksaveasfilename(
