@@ -7,10 +7,13 @@ une vidéo: slides annotées + voix off française naturelle.
 100 % **offline** une fois le modèle vocal installé : pas d'avatar, pas de SaaS,
 aucune donnée envoyée à l'extérieur.
 
-<!-- Captures : déposez vos images dans examples/screenshots/ puis dé-commentez.
-![Éditeur graphique](examples/screenshots/editeur.png)
-![Réglages audio](examples/screenshots/reglages-audio.png)
--->
+![Éditeur graphique tuto-gen](examples/screenshots/editeur.png)
+
+*L'éditeur : scènes, aperçu en direct, timeline et panneau d'annotations.*
+
+![Réglages audio (voix XTTS)](examples/screenshots/reglages-audio.png)
+
+*Réglages audio : état du moteur vocal, voix clonable et dictionnaire de prononciation.*
 
 ## Fonctionnalités
 
