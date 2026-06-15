@@ -1,45 +1,70 @@
-# Exemple complet : tutoriel "Activer la double authentification" (Verde)
+# Exemple de projet tuto-gen (modèle « dossier » : assets dans media/).
 # Lancer : python -m tuto_gen build examples/tuto.yaml --preview
-#
-# Les screenshots/logos n'existent pas dans ce dépôt : le pipeline génère
-# automatiquement des placeholders pour que la vidéo se produise sans assets.
-
 meta:
-  titre: "Activer la double authentification"
-  app: "Verde"
-  logo: "assets/logo_verde.png"     # absent → logo placeholder (pastille "V")
-  couleur_fond: "#2D6A4F"            # vert Verde
+  titre: Mon tutoriel
+  app: ""
+  logo: media/logo.png
+  couleur_fond: "#ffffff"
   couleur_accent: "#ffffff"
-  resolution: [1920, 1080]
+  resolution:
+    - 1920
+    - 1080
   fps: 30
-  voix: "ff_siwis"                   # voix Kokoro ; repli auto sur voix système
-
+  voix: fr_FR-upmc-medium
+  fond_type: degrade
+  couleur_fond2: "#ffe2cc"
+  degrade_sens: vertical
+  prononciations:
+    tuto-gen: tuto jaine
+  voix_vitesse: 1.22
+  voix_expressivite: 0.93
+  voix_fluidite: true
+  sous_titre_fond_opacite: 0.5
+  taille_base: 12.0
 scenes:
   - id: intro
     type: title
-    titre: "Activer la double authentification"
-    sous_titre: "Sécurisez votre compte en 3 étapes"
-    duree_min: 3
-
+    titre: Tuto-gen
+    sous_titre: Vidéo support (tuto)
+    titre_x: 55.0
+    titre_y: 52.9
+    sous_titre_x: 55.3
+    sous_titre_y: 78.2
+    logo_x: 51.4
+    logo_y: 20.7
+    logo_echelle: 238.7
+    duree_min: 3.0
   - id: etape_1
     type: screenshot
-    titre: "Accédez aux paramètres de sécurité"
-    screenshot: "screenshots/settings_security.png"
-    narration: |
-      Dans votre tableau de bord, cliquez sur votre avatar en haut à droite,
-      puis sélectionnez Paramètres, et enfin l'onglet Sécurité.
+    titre: Tuto
+    sous_titre: Audio/vidéo
+    titre_x: 21.4
+    titre_y: 38.0
+    sous_titre_x: 24.6
+    sous_titre_y: 62.2
+    logo_x: 5.1
+    logo_y: 10.8
+    logo_echelle: 113.7
+    captures:
+      - chemin: media/capture-reglages.png
+        debut: 0.0
+        decalage_x: 27.0
+        decalage_y: -0.7
+        echelle: 137.2
+    narrations:
+      - texte: Le réglage ici du moteur audio
+        debut: 0.0
+    duree_min: 9.14
     annotations:
       - type: arrow
-        de: [15, 18]                 # coordonnées en % de la zone screenshot
-        vers: [60, 45]
-        couleur: "#FF6B35"
-      - type: highlight
-        zone: [55, 38, 80, 55]       # [x1%, y1%, x2%, y2%]
-        couleur: "#FFD166"
-        opacite: 0.4
-
-  - id: outro
-    type: title
-    titre: "Double authentification activée ✓"
-    sous_titre: "Votre compte est maintenant sécurisé"
-    duree_min: 4
+        couleur: "#00f900"
+        de:
+          - 69.0
+          - -9.0
+        vers:
+          - 105.4
+          - 24.3
+        taille: 42
+        style: Check
+        rotation: -7
+        debut: 0.58
