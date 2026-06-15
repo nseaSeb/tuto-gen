@@ -274,23 +274,41 @@ class ProjectMixin:
 
         Soigne les projets enregistrés avec un ancien chemin volatile de
         sample livré (cf. `_chemin_sample_stable`) : sans cela, le son reste
-        muet jusqu'à réaffectation manuelle. Sans effet si rien n'est cassé."""
+        muet jusqu'à réaffectation manuelle. Sans effet si rien n'est cassé.
+
+        La correspondance se fait par nom de fichier. En cas d'homonymie
+        (plusieurs candidats pour un même nom), on s'abstient de deviner :
+        relier au mauvais bruitage en silence serait plus déroutant qu'un
+        trou franc. On signale alors l'ambiguïté pour réaffectation manuelle."""
         biblio = None
-        repares = 0
+        repares = ambigus = introuvables = 0
         for s in self.scenes:
             for sa in s.samples:
                 if not sa.chemin or Path(sa.chemin).is_file():
                     continue
                 if biblio is None:
-                    biblio = {p.name: p for p in settings.lister_samples(self.reglages)}
-                trouve = biblio.get(Path(sa.chemin).name)
-                if trouve is not None:
-                    sa.chemin = Path(self._chemin_sample_stable(trouve))
-                    self._sample_durees.pop(str(trouve), None)
+                    biblio = {}
+                    for p in settings.lister_samples(self.reglages):
+                        biblio.setdefault(p.name, []).append(p)
+                candidats = biblio.get(Path(sa.chemin).name, [])
+                if len(candidats) == 1:
+                    neuf = Path(self._chemin_sample_stable(candidats[0]))
+                    sa.chemin = neuf
+                    self._sample_durees.pop(str(neuf), None)
                     repares += 1
+                elif len(candidats) > 1:
+                    ambigus += 1
+                else:
+                    introuvables += 1
         if repares:
             self._log(f"   ↺ {repares} sample(s) manquant(s) re-localisé(s) "
                       "depuis la bibliothèque.\n")
+        if ambigus:
+            self._log(f"   ⚠ {ambigus} sample(s) à nom ambigu (plusieurs "
+                      "correspondances) — à réaffecter dans le panneau Sample.\n")
+        if introuvables:
+            self._log(f"   ⚠ {introuvables} sample(s) introuvable(s) dans la "
+                      "bibliothèque — à réaffecter dans le panneau Sample.\n")
 
     def _enregistrer_yaml(self):
         f = filedialog.asksaveasfilename(
