@@ -15,7 +15,7 @@ from tkinter import colorchooser, filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from .. import composer, config, paquet, settings, tts
+from .. import _build_version, composer, config, paquet, settings, tts
 from ..cli import _ouvrir, _slug, construire
 from .common import (
     VERT, TL_LEFT, TL_TOP, TL_ROW_H, TL_GAP, TL_HANDLE, TL_MIN_BODY,
@@ -314,6 +314,9 @@ class PanelsMixin:
                   "nouveaux projets. Pour la voix, voir « 🎙 Audio ».",
                   foreground="#888", wraplength=420).grid(
             row=14, column=0, columnspan=3, sticky="w")
+        ttk.Label(frm, text=f"Version {_build_version.BUILD_VERSION}",
+                  foreground="#888").grid(
+            row=15, column=0, sticky="w", pady=(12, 0))
         ttk.Button(frm, text="Fermer", command=_on_close).grid(
             row=15, column=2, sticky="e", pady=(12, 0))
 

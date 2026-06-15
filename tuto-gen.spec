@@ -99,6 +99,40 @@ hiddenimports += [
 ]
 
 
+# --- Numéro de build (affiché dans la popup ⚙ Réglages) -------------------
+# Le .spec étant exécuté à chaque build, on incrémente ici le numéro de 0.01
+# AVANT la collecte, pour que la valeur soit embarquée dans le binaire.
+# « Demande explicite » : éditer _build_version.py (BUILD_VERSION + FIGER_VERSION=True)
+# fige la version pour ce build sans incrément, puis réactive l'auto-incrément.
+def _maj_build_version():
+    import re
+    from pathlib import Path
+
+    chemin = Path(SPECPATH) / "tuto_gen" / "_build_version.py"
+    texte = chemin.read_text(encoding="utf-8")
+
+    m_ver = re.search(r'BUILD_VERSION\s*=\s*"([^"]*)"', texte)
+    m_fig = re.search(r"FIGER_VERSION\s*=\s*(True|False)", texte)
+    courante = m_ver.group(1) if m_ver else "1.00"
+    figer = (m_fig.group(1) == "True") if m_fig else False
+
+    if figer:
+        nouvelle = courante  # version explicite : on garde telle quelle
+    else:
+        nouvelle = f"{float(courante) + 0.01:.2f}"
+
+    texte = re.sub(r'BUILD_VERSION\s*=\s*"[^"]*"',
+                   f'BUILD_VERSION = "{nouvelle}"', texte, count=1)
+    texte = re.sub(r"FIGER_VERSION\s*=\s*(True|False)",
+                   "FIGER_VERSION = False", texte, count=1)
+    chemin.write_text(texte, encoding="utf-8")
+    print(f"[build] version = {nouvelle}")
+    return nouvelle
+
+
+_BUILD_VERSION = _maj_build_version()
+
+
 a = Analysis(
     ["packaging/launcher.py"],
     pathex=["."],
