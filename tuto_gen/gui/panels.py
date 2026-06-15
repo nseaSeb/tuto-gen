@@ -179,9 +179,9 @@ class PanelsMixin:
         win = tk.Toplevel(self.root)
         self._reglages_win = win
         win.title("Réglages du projet")
-        win.geometry("520x560")
+        win.geometry("520x620")
         win.transient(self.root)
-        win.resizable(False, False)
+        win.resizable(False, True)
 
         def _on_close():
             self.btn_fond = None
@@ -194,12 +194,34 @@ class PanelsMixin:
             self.lbl_samples = None
             self.lbl_police = None
             self._reglages_win = None
+            try:
+                self._scroll_canvases.remove(canvas)
+            except ValueError:
+                pass
             win.destroy()
         win.protocol("WM_DELETE_WINDOW", _on_close)
 
-        frm = ttk.Frame(win, padding=14)
-        frm.pack(fill="both", expand=True)
+        # Conteneur défilant : le contenu peut dépasser la hauteur visible de la
+        # fenêtre (sinon le bas — n° de version, bouton Fermer — reste caché).
+        # Le canvas est enregistré dans _scroll_canvases pour que le routeur de
+        # molette/trackpad global (_wheel_router) le prenne en charge.
+        outer = ttk.Frame(win)
+        outer.pack(fill="both", expand=True)
+        canvas = tk.Canvas(outer, highlightthickness=0,
+                           background=win.cget("background"))
+        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        self._scroll_canvases.append(canvas)
+
+        frm = ttk.Frame(canvas, padding=14)
         frm.columnconfigure(1, weight=1)
+        _frm_id = canvas.create_window((0, 0), window=frm, anchor="nw")
+        canvas.bind("<Configure>",
+                    lambda e: canvas.itemconfigure(_frm_id, width=e.width))
+        frm.bind("<Configure>",
+                 lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
         ttk.Label(frm, text="Titre :").grid(row=0, column=0, sticky="w", pady=5)
         ttk.Entry(frm, textvariable=self.titre_var).grid(
