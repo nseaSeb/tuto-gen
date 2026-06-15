@@ -1,8 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 """Spec PyInstaller pour le binaire macOS `tuto-gen`.
 
-Embarque XTTS-v2 (Coqui, modèle dans assets/xtts) et ffmpeg, pour une synthèse
-vocale 100 % hors-ligne sans installation. Approche « qualité ou rien » : pas
+Embarque la bibliothèque XTTS-v2 (Coqui) et ffmpeg. Le **modèle** XTTS
+(~1,7 Go) n'est PAS embarqué (build allégé) : il est résolu au runtime (cf.
+`_xtts_dossier_bundle()` → None ⇒ fallback `_TTSApi(XTTS_MODELE)`). Synthèse
+hors-ligne une fois le modèle disponible ; approche « qualité ou rien » : pas
 de moteur vocal de repli.
 
 Build : pyinstaller --noconfirm tuto-gen.spec
