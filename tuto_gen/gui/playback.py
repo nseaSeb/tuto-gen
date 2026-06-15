@@ -91,8 +91,12 @@ class PlaybackMixin:
                     if not txt:
                         continue
                     p = config.params_voix(meta, n)
+                    # La signature du dico de prononciation fait partie de la clé :
+                    # sans elle, ajouter/modifier un mot (texte brut inchangé)
+                    # rejouerait l'audio d'avant le dico dans l'aperçu.
+                    dico_sig = tuple(sorted((p["dico"] or {}).items()))
                     cle = (txt, str(p["ref_voix"]), p["speaker"], p["speed"],
-                           p["temperature"], p["fluidite"])
+                           p["temperature"], p["fluidite"], dico_sig)
                     clip = self._play_cache.get(cle)
                     if clip is None:
                         try:
