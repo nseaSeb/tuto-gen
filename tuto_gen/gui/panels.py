@@ -30,6 +30,7 @@ class PanelsMixin:
         for w in self.settings_inner.winfo_children():
             w.destroy()
         self.btn_ecoute = None
+        self.btn_regen = None
         self._narr_dur_maj = None  # rafraîchisseur des durées (panneau narration)
         self._arrow_vars = {}
         self._hl_vars = {}
@@ -775,9 +776,14 @@ class PanelsMixin:
         self.btn_ecoute = ttk.Button(btn_row, text="🔊  Écouter",
                                       command=lambda: self._ecouter(n))
         self.btn_ecoute.pack(side="left")
-        ttk.Button(btn_row, text="🔄  Régénérer",
-                   command=lambda: self._regenerer_narration(n, cache_lbl)).pack(
-            side="left", padx=(6, 0))
+        self.btn_regen = ttk.Button(
+            btn_row, text="🔄  Régénérer",
+            command=lambda: self._regenerer_narration(n, cache_lbl))
+        self.btn_regen.pack(side="left", padx=(6, 0))
+        # Panneau reconstruit pendant une synthèse : recrée les boutons grisés.
+        if getattr(self, "_tts_busy", False):
+            self.btn_ecoute.config(state="disabled")
+            self.btn_regen.config(state="disabled")
         self._sh("« Régénérer » force une nouvelle prise (voix légèrement "
                  "différente).", fg="#555")
         self._sh("La durée audio détermine la fin si « fin » est laissé.",

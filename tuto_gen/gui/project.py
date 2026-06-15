@@ -351,9 +351,8 @@ class ProjectMixin:
                 if isinstance(item, tuple) and item:
                     if item[0] == "__DONE__":
                         self._fin(item[1])
-                    elif item[0] == "__ECOUTE__":
-                        if self.btn_ecoute and self.btn_ecoute.winfo_exists():
-                            self.btn_ecoute.config(state="normal")
+                    elif item[0] in ("__ECOUTE__", "__REGEN__"):
+                        self._set_tts_busy(False)
                     elif item[0] == "__MP3__":
                         _, dossier, n = item
                         self._log(f"✅ {n} fichier(s) MP3 exporté(s).\n")

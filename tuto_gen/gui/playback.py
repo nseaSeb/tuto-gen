@@ -202,13 +202,31 @@ class PlaybackMixin:
         self._maj_boutons_play("idle")
 
     # ================================================================= TTS
+    def _set_tts_busy(self, busy: bool):
+        """Grise (ou réactive) les boutons « Écouter » et « Régénérer » du
+        panneau narration tant qu'une synthèse est en cours, pour éviter les
+        clics multiples. Le drapeau survit à une reconstruction du panneau
+        (cf. _panel_narration) ; les références de boutons, elles, sont
+        recréées et donc retrouvées à chaque appel via getattr."""
+        self._tts_busy = busy
+        etat = "disabled" if busy else "normal"
+        for nom in ("btn_ecoute", "btn_regen"):
+            b = getattr(self, nom, None)
+            if b is not None:
+                try:
+                    if b.winfo_exists():
+                        b.config(state=etat)
+                except Exception:
+                    pass
+
     def _ecouter(self, narration):
         phrase = (getattr(narration, "texte", "") or "").strip()
         if not phrase:
             self._log("   (pas de narration)\n")
             return
-        if self.btn_ecoute and self.btn_ecoute.winfo_exists():
-            self.btn_ecoute.config(state="disabled")
+        if getattr(self, "_tts_busy", False):
+            return  # une synthèse est déjà en cours
+        self._set_tts_busy(True)
         self._log("\n🔊 Écoute…\n")
         p = config.params_voix(self.meta, narration)
         threading.Thread(
@@ -390,7 +408,10 @@ class PlaybackMixin:
         texte = (getattr(narration, "texte", "") or "").strip()
         if not texte:
             return
+        if getattr(self, "_tts_busy", False):
+            return  # une synthèse est déjà en cours
         p = config.params_voix(self.meta, narration)
+        self._set_tts_busy(True)
         self._set_cache_status(status_lbl, "⏳ nouvelle prise…", "#caa44a")
         self._log("🔄 Régénération de l'audio (nouvelle prise)…\n")
 
@@ -407,6 +428,8 @@ class PlaybackMixin:
                     self.q.put("   (rien à régénérer)\n")
             except Exception as e:
                 self._signaler_echec_tts(status_lbl, "Régénération de l'audio", e)
+            finally:
+                self.q.put(("__REGEN__",))
         threading.Thread(target=work, daemon=True).start()
 
     def _play_sample(self, chemin):

@@ -90,6 +90,8 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
         self._sample_durees: dict = {}
         self._narr_durees: dict = {}  # durée audio (cache) par (texte+voix)
         self.btn_ecoute: ttk.Button | None = None
+        self.btn_regen: ttk.Button | None = None
+        self._tts_busy = False  # une synthèse (écoute/régén) est en cours
 
         # Lecture (Play) de l'aperçu — déroulé du tuto avec son
         self._playing = False
