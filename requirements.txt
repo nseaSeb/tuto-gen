@@ -1,0 +1,37 @@
+# Dépendances tuto-gen (Python 3.11+)
+
+# Composition d'images
+Pillow>=10.0
+
+# Formats d'image étendus (logo / fond / captures) :
+#   - pillow-heif : photos HEIC/HEIF (iPhone)
+#   - cairosvg    : rastérisation des SVG (nécessite la lib système `cairo`,
+#                   ex. `brew install cairo` sur macOS)
+# WebP est géré nativement par Pillow. Ces deux paquets sont optionnels : en
+# leur absence, les formats correspondants sont simplement indisponibles.
+pillow-heif>=0.13
+cairosvg>=2.7
+
+# Assemblage vidéo (utilise ffmpeg en sous-jacent — à installer séparément :
+# `brew install ffmpeg`)
+moviepy>=2.0
+
+# Parsing de la configuration
+PyYAML>=6.0
+
+# Manipulation audio (lecture de durée, écriture WAV)
+soundfile>=0.12
+numpy>=1.24
+
+# --- TTS : XTTS-v2 (Coqui) — moteur UNIQUE, qualité max, voix clonable ------
+# 100 % offline : le modèle (~1,7 Go) est embarqué dans assets/xtts/.
+# Approche « qualité ou rien » : aucun moteur de repli (ni Piper, ni `say`).
+# torchaudio + torchcodec sont requis par coqui-tts pour l'IO audio (PyTorch≥2.9).
+coqui-tts>=0.27
+torchaudio
+torchcodec
+# Note : coqui-tts importe `transformers.pytorch_utils.isin_mps_friendly`,
+# retiré dans transformers 5.x ; tts.py réinjecte un shim de compatibilité.
+
+# --- Sous-titres (phase 2, optionnel) --------------------------------------
+# openai-whisper

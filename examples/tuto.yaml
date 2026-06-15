@@ -1,0 +1,45 @@
+# Exemple complet : tutoriel "Activer la double authentification" (Verde)
+# Lancer : python -m tuto_gen build examples/tuto.yaml --preview
+#
+# Les screenshots/logos n'existent pas dans ce dépôt : le pipeline génère
+# automatiquement des placeholders pour que la vidéo se produise sans assets.
+
+meta:
+  titre: "Activer la double authentification"
+  app: "Verde"
+  logo: "assets/logo_verde.png"     # absent → logo placeholder (pastille "V")
+  couleur_fond: "#2D6A4F"            # vert Verde
+  couleur_accent: "#ffffff"
+  resolution: [1920, 1080]
+  fps: 30
+  voix: "ff_siwis"                   # voix Kokoro ; repli auto sur voix système
+
+scenes:
+  - id: intro
+    type: title
+    titre: "Activer la double authentification"
+    sous_titre: "Sécurisez votre compte en 3 étapes"
+    duree_min: 3
+
+  - id: etape_1
+    type: screenshot
+    titre: "Accédez aux paramètres de sécurité"
+    screenshot: "screenshots/settings_security.png"
+    narration: |
+      Dans votre tableau de bord, cliquez sur votre avatar en haut à droite,
+      puis sélectionnez Paramètres, et enfin l'onglet Sécurité.
+    annotations:
+      - type: arrow
+        de: [15, 18]                 # coordonnées en % de la zone screenshot
+        vers: [60, 45]
+        couleur: "#FF6B35"
+      - type: highlight
+        zone: [55, 38, 80, 55]       # [x1%, y1%, x2%, y2%]
+        couleur: "#FFD166"
+        opacite: 0.4
+
+  - id: outro
+    type: title
+    titre: "Double authentification activée ✓"
+    sous_titre: "Votre compte est maintenant sécurisé"
+    duree_min: 4

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Lanceur tuto-gen — exécute l'éditeur (ou la CLI) depuis le venv du projet.
+#
+# Usage :
+#   ./tuto                 # ouvre l'interface graphique
+#   ./tuto gui             # idem
+#   ./tuto build x.yaml    # génère une vidéo depuis un YAML
+#   ./tuto voices          # liste les voix disponibles
+#
+# Astuce : crée un raccourci global une seule fois, puis tape « tuto » partout :
+#   ln -s "$(pwd)/tuto" /usr/local/bin/tuto
+
+set -euo pipefail
+
+# Dossier du script, même si appelé via un lien symbolique
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+
+PY="$ROOT/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+  echo "✗ venv introuvable : $PY" >&2
+  echo "  Crée-le puis installe les dépendances :" >&2
+  echo "    python3 -m venv \"$ROOT/.venv\" && \"$PY\" -m pip install -e \"$ROOT\"" >&2
+  exit 1
+fi
+
+cd "$ROOT"
+exec "$PY" -m tuto_gen "$@"
