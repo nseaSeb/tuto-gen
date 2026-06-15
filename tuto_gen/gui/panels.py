@@ -1074,7 +1074,11 @@ class PanelsMixin:
         _remplir()
 
         def _assigner(chemin: Path):
-            chemin = Path(self._adopter(self._chemin_sample_stable(chemin)))
+            # Le picker fournit déjà un chemin de bibliothèque stable : livré
+            # (assets/samples, résolu par nom à l'ouverture) ou perso
+            # (~/.tuto-gen/samples). On ne copie rien ici : les livrés sont
+            # embarqués dans l'app, les persos sont rassemblés à l'enregistrement.
+            chemin = Path(chemin)
             sa.chemin = chemin
             self._sample_durees.pop(str(chemin), None)
             lbl_nm.config(text=Path(chemin).name, fg="#bbb")

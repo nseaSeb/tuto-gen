@@ -31,7 +31,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from . import config, tts
+from . import config, settings, tts
 
 
 def _emit(log, msg: str) -> None:
@@ -123,6 +123,19 @@ def collecter(cfg: config.Config, media_dir, log=None) \
         vus[key] = dest
         return dest
 
+    livres = settings.samples_livres()
+
+    def _est_livre(chemin) -> bool:
+        """Vrai si `chemin` désigne un sample livré avec l'app (assets/samples)."""
+        if not (livres and chemin):
+            return False
+        absp = _abspath(cfg.base_dir, chemin)
+        try:
+            return absp is not None and \
+                absp.resolve().relative_to(Path(livres).resolve()) is not None
+        except (ValueError, OSError):
+            return False
+
     cfg_out.meta.logo = adopt(cfg.meta.logo)
     cfg_out.meta.fond_image = adopt(cfg.meta.fond_image)
     cfg_out.meta.voix_reference = adopt(cfg.meta.voix_reference)
@@ -131,7 +144,13 @@ def collecter(cfg: config.Config, media_dir, log=None) \
         for c in s.captures:
             c.chemin = adopt(c.chemin)
         for sa in s.samples:
-            sa.chemin = adopt(sa.chemin)
+            # Les samples livrés (★) sont embarqués dans l'app : on ne les copie
+            # pas dans le projet, on les référence par leur nom (unique), re-
+            # résolu à l'ouverture. Seuls les samples perso voyagent avec le paquet.
+            if _est_livre(sa.chemin):
+                sa.chemin = Path(Path(sa.chemin).name)
+            else:
+                sa.chemin = adopt(sa.chemin)
     return cfg_out, len(vus), manquants
 
 

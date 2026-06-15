@@ -326,7 +326,8 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
         # actif étant signalé par le bouton désactivé (donc non cliquable).
         self._mode_btns: dict[str, ttk.Button] = {}
         for _mode, _txt in (("timeline", "Timeline"),
-                            ("generer", "🎬  Générer la vidéo")):
+                            ("generer", "🎬  Générer la vidéo"),
+                            ("journal", "📋  Journal")):
             b = ttk.Button(tl_hdr, text=_txt,
                            command=lambda m=_mode: self._set_mode(m))
             b.pack(side="left", padx=(0, 3))
@@ -400,6 +401,19 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
                            font=("Menlo", 10), bg="#0d0d0d", fg="#ccc")
         self.log.pack(fill="both", expand=True, pady=(0, 2))
 
+        # Corps « journal » : journal persistant, toujours accessible via
+        # l'onglet « 📋 Journal ». Mêmes messages que le journal de génération,
+        # mais cumulés sur toute la session et affichés du plus récent (haut)
+        # au plus ancien, avec défilement vertical.
+        self.jour_wrap = tk.Frame(self.tl_body, bg="#111")
+        jvsb = ttk.Scrollbar(self.jour_wrap, orient="vertical")
+        jvsb.pack(side="right", fill="y")
+        self.journal = tk.Text(self.jour_wrap, wrap="word", state="disabled",
+                               font=("Menlo", 10), bg="#0d0d0d", fg="#ccc",
+                               yscrollcommand=jvsb.set)
+        self.journal.pack(side="left", fill="both", expand=True, pady=(0, 2))
+        jvsb.config(command=self.journal.yview)
+
         # Molette/trackpad : routeur global (après création de tous les widgets).
         self._init_molette()
 
@@ -425,7 +439,7 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
         for cnv in self._scroll_canvases:
             cnv.bind("<Enter>",
                      lambda e, c=cnv: setattr(self, "_wheel_target", c), add="+")
-        for w in (self.apercu_canvas, self.log):
+        for w in (self.apercu_canvas, self.log, self.journal):
             w.bind("<Enter>",
                    lambda e: setattr(self, "_wheel_target", None), add="+")
         for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):

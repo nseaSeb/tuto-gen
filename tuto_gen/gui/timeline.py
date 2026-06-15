@@ -545,16 +545,20 @@ class TimelineMixin:
         self._mode = mode
         for m, b in self._mode_btns.items():
             b.config(state="disabled" if m == mode else "normal")
+        # On masque tout, puis on n'affiche que le corps du mode courant.
+        self.tl_canvas.pack_forget()
+        self.tl_vsb.pack_forget()
+        self.tl_actions.pack_forget()
+        self.gen_wrap.pack_forget()
+        self.jour_wrap.pack_forget()
         if mode == "timeline":
-            self.gen_wrap.pack_forget()
             self.tl_actions.pack(side="left", fill="x")
             self.tl_vsb.pack(side="right", fill="y")
             self.tl_canvas.pack(side="left", fill="both", expand=True)
             self.root.after_idle(self._draw_timeline)
+        elif mode == "journal":
+            self.jour_wrap.pack(fill="both", expand=True)
         else:
-            self.tl_canvas.pack_forget()
-            self.tl_vsb.pack_forget()
-            self.tl_actions.pack_forget()
             self.gen_wrap.pack(fill="both", expand=True)
 
     def _sizer_down(self, ev):

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import difflib
 import queue
+import re
 import subprocess
 import tempfile
 import threading
@@ -245,72 +247,64 @@ class ProjectMixin:
             self._log(f"   ⚠ copie dans le projet impossible : {e}\n")
             return str(chemin)
 
-    def _chemin_sample_stable(self, chemin) -> str:
-        """Pérennise le chemin d'un sample pris dans la bibliothèque livrée (★).
-
-        Les samples livrés résident sous `sys._MEIPASS/assets/samples`, un
-        chemin volatile : il change à chaque build et, sur macOS, à chaque
-        lancement de l'app non signée (App Translocation). Le référencer
-        directement fait « disparaître » le son à la relecture comme à la
-        génération (le fichier n'existe plus à ce chemin → piste ignorée).
-        On copie donc le fichier dans la bibliothèque utilisateur
-        (~/.tuto-gen/samples), stable et inscriptible, et on renvoie ce
-        chemin pérenne. Les autres sources sont renvoyées telles quelles."""
-        livres = settings.samples_livres()
-        if not (livres and chemin):
-            return str(chemin)
-        try:
-            Path(chemin).resolve().relative_to(Path(livres).resolve())
-        except (ValueError, OSError):
-            return str(chemin)  # pas un sample livré → rien à pérenniser
-        try:
-            dest = settings.dossier_samples(self.reglages)
-            return str(paquet.adopter_fichier(dest, chemin))
-        except Exception as e:
-            self._log(f"   ⚠ copie du sample livré impossible : {e}\n")
-            return str(chemin)
+    @staticmethod
+    def _cle_sample(nom: str) -> str:
+        """Clé de rapprochement d'un sample : nom sans extension, sans segment
+        entre crochets (souvent un horodatage d'export, ex. « [2026-06-14 …] »)
+        et casse repliée. Permet de retrouver un sample même après renommage
+        « cosmétique » (Chimes Finger Down [2026-06-14 131737] → Chimes Finger
+        Down)."""
+        return re.sub(r"\s*\[[^\]]*\]", "", Path(nom).stem).strip().lower()
 
     def _reparer_samples_manquants(self):
-        """Re-cible les samples dont le fichier a disparu vers un même nom
-        retrouvé dans la bibliothèque (livrés ★ + dossier perso).
+        """Re-localise par nom les samples dont le chemin stocké ne pointe plus
+        sur un fichier (typiquement un sample livré ★ référencé par un ancien
+        chemin volatile : le bundle change à chaque build et, sur macOS, à
+        chaque lancement non signé — App Translocation).
 
-        Soigne les projets enregistrés avec un ancien chemin volatile de
-        sample livré (cf. `_chemin_sample_stable`) : sans cela, le son reste
-        muet jusqu'à réaffectation manuelle. Sans effet si rien n'est cassé.
-
-        La correspondance se fait par nom de fichier. En cas d'homonymie
-        (plusieurs candidats pour un même nom), on s'abstient de deviner :
-        relier au mauvais bruitage en silence serait plus déroutant qu'un
-        trou franc. On signale alors l'ambiguïté pour réaffectation manuelle."""
-        biblio = None
-        repares = ambigus = introuvables = 0
+        Trois passes, de la plus sûre à la plus tolérante : nom exact, puis clé
+        normalisée (cf. `_cle_sample`, encaisse un renommage cosmétique), puis
+        rapprochement flou (`difflib`) si le nom reste proche. Sans effet si
+        rien n'est cassé."""
+        biblio = cles = None
+        repares = approx = introuvables = 0
         for s in self.scenes:
             for sa in s.samples:
                 if not sa.chemin or Path(sa.chemin).is_file():
                     continue
                 if biblio is None:
-                    biblio = {}
-                    for p in settings.lister_samples(self.reglages):
-                        biblio.setdefault(p.name, []).append(p)
-                candidats = biblio.get(Path(sa.chemin).name, [])
-                if len(candidats) == 1:
-                    neuf = Path(self._chemin_sample_stable(candidats[0]))
-                    sa.chemin = neuf
-                    self._sample_durees.pop(str(neuf), None)
-                    repares += 1
-                elif len(candidats) > 1:
-                    ambigus += 1
-                else:
+                    paths = settings.lister_samples(self.reglages)
+                    biblio = {p.name: p for p in paths}
+                    cles = {}
+                    for p in paths:          # 1er gagnant pour une clé donnée
+                        cles.setdefault(self._cle_sample(p.name), p)
+                nom = Path(sa.chemin).name
+                trouve = biblio.get(nom)     # 1) nom exact
+                exact = trouve is not None
+                if trouve is None:           # 2) clé normalisée (sans [..]/casse)
+                    trouve = cles.get(self._cle_sample(nom))
+                if trouve is None:           # 3) plus proche voisin
+                    proches = difflib.get_close_matches(
+                        self._cle_sample(nom), list(cles), n=1, cutoff=0.6)
+                    if proches:
+                        trouve = cles[proches[0]]
+                if trouve is None:
                     introuvables += 1
+                    continue
+                sa.chemin = trouve
+                self._sample_durees.pop(str(trouve), None)
+                if exact:
+                    repares += 1
+                else:
+                    approx += 1
+                    self._log(f"   ≈ sample « {nom} » rapproché de "
+                              f"« {trouve.name} ».\n")
         if repares:
-            self._log(f"   ↺ {repares} sample(s) manquant(s) re-localisé(s) "
-                      "depuis la bibliothèque.\n")
-        if ambigus:
-            self._log(f"   ⚠ {ambigus} sample(s) à nom ambigu (plusieurs "
-                      "correspondances) — à réaffecter dans le panneau Sample.\n")
+            self._log(f"   ↺ {repares} sample(s) re-localisé(s) depuis "
+                      "la bibliothèque.\n")
         if introuvables:
-            self._log(f"   ⚠ {introuvables} sample(s) introuvable(s) dans la "
-                      "bibliothèque — à réaffecter dans le panneau Sample.\n")
+            self._log(f"   ⚠ {introuvables} sample(s) introuvable(s) — à "
+                      "réaffecter dans le panneau Sample.\n")
 
     def _controle_assets(self):
         """Signale à l'ouverture les assets référencés dont le fichier a disparu.
@@ -480,6 +474,11 @@ class ProjectMixin:
         self.log.insert("end", s)
         self.log.see("end")
         self.log.config(state="disabled")
+        # Journal persistant (onglet 📋) : cumulé, plus récent en haut.
+        self.journal.config(state="normal")
+        self.journal.insert("1.0", s)
+        self.journal.see("1.0")
+        self.journal.config(state="disabled")
 
     def _fin(self, path: str | None):
         self.prog.stop()
