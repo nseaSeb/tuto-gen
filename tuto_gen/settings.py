@@ -28,6 +28,23 @@ SESSION = DOSSIER / "session.json"        # état : scène courante, chemin proj
 # Extensions audio reconnues pour la bibliothèque de samples
 EXT_AUDIO = (".wav", ".mp3", ".aiff", ".aif", ".m4a", ".ogg", ".flac")
 
+# Résolutions de sortie vidéo proposées (16:9). La 1re reste l'historique.
+RESOLUTIONS: list[tuple[str, tuple[int, int]]] = [
+    ("1080p — Full HD (1920 × 1080)", (1920, 1080)),
+    ("720p — HD (1280 × 720)", (1280, 720)),
+    ("1440p — QHD (2560 × 1440)", (2560, 1440)),
+    ("2160p — 4K UHD (3840 × 2160)", (3840, 2160)),
+]
+
+
+def label_resolution(res: tuple[int, int]) -> str:
+    """Libellé d'une résolution (le préréglage connu, sinon « L × H »)."""
+    w, h = int(res[0]), int(res[1])
+    for lbl, (rw, rh) in RESOLUTIONS:
+        if (rw, rh) == (w, h):
+            return lbl
+    return f"{w} × {h}"
+
 
 def samples_livres() -> Path | None:
     """Dossier de samples livrés avec l'appli (./assets/samples).
@@ -69,6 +86,7 @@ class Reglages:
     samples_dir: str | None = None   # dossier bibliothèque (défaut: SAMPLES_DIR)
     police: str | None = None        # fichier de police (.ttf/.otf) global
     taille_base: float = 3.8         # taille de texte de référence (% hauteur)
+    resolution: list = field(default_factory=lambda: [1920, 1080])  # sortie vidéo
     # Taille (%) mémorisée par style de flèche : {style: taille}
     tailles_fleche: dict = field(default_factory=dict)
 

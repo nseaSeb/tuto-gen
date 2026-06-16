@@ -332,16 +332,36 @@ class PanelsMixin:
                   "0,5 = bande translucide.", foreground="#888",
                   wraplength=320).grid(row=12, column=1, columnspan=2, sticky="w")
 
-        ttk.Separator(frm).grid(row=13, column=0, columnspan=3, sticky="we", pady=10)
+        # Résolution de sortie vidéo (16:9). Préréglages classiques + valeur
+        # courante si le projet utilise une taille hors-liste.
+        ttk.Label(frm, text="Résolution :").grid(
+            row=13, column=0, sticky="w", pady=5)
+        res_row = ttk.Frame(frm)
+        res_row.grid(row=13, column=1, columnspan=2, sticky="w", pady=5)
+        valeurs = [lbl for lbl, _ in settings.RESOLUTIONS]
+        courant = settings.label_resolution(tuple(self.meta.resolution))
+        if courant not in valeurs:
+            valeurs = [courant] + valeurs
+        self._res_var = tk.StringVar(value=courant)
+        res_combo = ttk.Combobox(res_row, textvariable=self._res_var,
+                                 state="readonly", width=30, values=valeurs)
+        res_combo.pack(side="left")
+        res_combo.bind("<<ComboboxSelected>>",
+                       lambda *_: self._on_resolution(self._res_var.get()))
+        ttk.Label(frm, text="Appliquée à l'aperçu et au rendu final.",
+                  foreground="#888", wraplength=320).grid(
+            row=14, column=1, columnspan=2, sticky="w")
+
+        ttk.Separator(frm).grid(row=15, column=0, columnspan=3, sticky="we", pady=10)
         ttk.Label(frm, text="Réglages visuels mémorisés et réappliqués aux "
                   "nouveaux projets. Pour la voix, voir « 🎙 Audio ».",
                   foreground="#888", wraplength=420).grid(
-            row=14, column=0, columnspan=3, sticky="w")
+            row=16, column=0, columnspan=3, sticky="w")
         ttk.Label(frm, text=f"Version {_build_version.BUILD_VERSION}",
                   foreground="#888").grid(
-            row=15, column=0, sticky="w", pady=(12, 0))
+            row=17, column=0, sticky="w", pady=(12, 0))
         ttk.Button(frm, text="Fermer", command=_on_close).grid(
-            row=15, column=2, sticky="e", pady=(12, 0))
+            row=17, column=2, sticky="e", pady=(12, 0))
 
     # ── État / installation du moteur vocal (modèle XTTS) ───────────────────
     def _maj_etat_moteur(self):

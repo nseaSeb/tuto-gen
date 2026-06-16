@@ -152,6 +152,7 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
             police=(Path(r.police)
                     if r.police and Path(r.police).is_file() else None),
             taille_base=getattr(r, "taille_base", 3.8),
+            resolution=self._reglage_resolution(),
             sous_titre_fond=getattr(r, "sous_titre_fond", "#000000"),
             sous_titre_fond_opacite=getattr(r, "sous_titre_fond_opacite", 0.55),
         )
@@ -628,6 +629,25 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
         self.reglages.voix = self.meta.voix
         settings.sauver(self.reglages)
         self._plan_apercu()
+
+    # ── Résolution de sortie ────────────────────────────────────────────────
+    def _reglage_resolution(self) -> tuple[int, int]:
+        """Résolution globale persistée, normalisée en tuple (défaut 1920×1080)."""
+        res = getattr(self.reglages, "resolution", None) or [1920, 1080]
+        try:
+            return (int(res[0]), int(res[1]))
+        except (TypeError, ValueError, IndexError):
+            return (1920, 1080)
+
+    def _on_resolution(self, label: str):
+        """Applique la résolution choisie : projet courant + réglage global."""
+        for lbl, res in settings.RESOLUTIONS:
+            if lbl == label:
+                self.meta.resolution = res
+                self.reglages.resolution = list(res)
+                settings.sauver(self.reglages)
+                self._plan_apercu()
+                return
 
     # ── Police globale ──────────────────────────────────────────────────────
     def _choisir_police(self):
