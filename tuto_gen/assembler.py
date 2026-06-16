@@ -24,6 +24,7 @@ from moviepy import (
     AudioFileClip,
     CompositeAudioClip,
     ImageClip,
+    VideoClip,
     concatenate_videoclips,
 )
 
@@ -77,6 +78,9 @@ def duree_scene(rendu: SceneRendue) -> float:
     for tx in scene.textes:
         if tx.fin is not None:
             besoin = max(besoin, tx.fin)
+    for z in scene.zooms:
+        if z.fin is not None:
+            besoin = max(besoin, z.fin)
 
     if scene.duree_min and scene.duree_min > 0:
         return max(scene.duree_min, besoin)
@@ -97,13 +101,41 @@ def _points_de_coupe(scene: Scene, duree: float) -> list[float]:
     for tx in scene.textes:
         pts.add(max(0.0, min(duree, tx.debut)))
         pts.add(max(0.0, min(duree, tx.fin if tx.fin is not None else duree)))
+    for z in scene.zooms:
+        pts.add(max(0.0, min(duree, z.debut)))
+        pts.add(max(0.0, min(duree, z.fin if z.fin is not None else duree)))
     return sorted(pts)
+
+
+def _zoom_actif(scene: Scene, t0: float, t1: float, duree: float) -> bool:
+    """Vrai si un zoom est en mouvement pendant l'intervalle ]t0, t1[."""
+    for z in scene.zooms:
+        fin = z.fin if z.fin is not None else duree
+        if z.debut < t1 and fin > t0:
+            return True
+    return False
+
+
+def _segment_zoom(scene: Scene, meta: Meta, base, t0: float, t1: float,
+                  duree: float):
+    """Clip animé d'un sous-segment traversé par un zoom.
+
+    Le contenu est figé sur l'intervalle (bornes posées aux points de coupe) :
+    on compose l'image une seule fois et on ne fait que recadrer/redimensionner
+    par frame selon l'avancement du zoom — peu coûteux."""
+    def frame_function(tl):
+        tr = composer.zoom_transform(scene, meta, t0 + tl, duree)
+        if tr is None:
+            return np.asarray(base)
+        return np.asarray(composer.appliquer_zoom(base, *tr))
+
+    return VideoClip(frame_function=frame_function, duration=t1 - t0)
 
 
 def _clip_video_scene(rendu: SceneRendue, meta: Meta, duree: float):
     """Construit le clip vidéo (sans audio) d'une scène par sous-segments."""
     scene = rendu.scene
-    if scene.type == "title":
+    if scene.type == "title" and not scene.zooms:
         frame = np.asarray(composer.composer_scene(scene, meta, 0.0).convert("RGB"))
         return ImageClip(frame).with_duration(duree)
 
@@ -113,9 +145,11 @@ def _clip_video_scene(rendu: SceneRendue, meta: Meta, duree: float):
         if t1 - t0 < 1e-3:
             continue
         milieu = (t0 + t1) / 2
-        frame = np.asarray(
-            composer.composer_scene(scene, meta, milieu).convert("RGB"))
-        segments.append(ImageClip(frame).with_duration(t1 - t0))
+        base = composer.composer_scene(scene, meta, milieu).convert("RGB")
+        if scene.zooms and _zoom_actif(scene, t0, t1, duree):
+            segments.append(_segment_zoom(scene, meta, base, t0, t1, duree))
+        else:
+            segments.append(ImageClip(np.asarray(base)).with_duration(t1 - t0))
 
     if not segments:
         frame = np.asarray(composer.composer_scene(scene, meta, 0.0).convert("RGB"))

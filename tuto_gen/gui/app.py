@@ -76,6 +76,8 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
         self._slide_disp: tuple | None = None   # (ix, iy, ratio) de l'aperçu
         self._free_drag: dict | None = None     # {"kind","idx"} en drag libre
         self._cap_drag: dict | None = None      # déplacement d'une capture
+        self._drag_zoom: dict | None = None      # déplacement d'une zone de zoom
+        self._base_cache: tuple | None = None    # (clé, image base) avant zoom
         self._title_pos_vars: dict = {}
         self._texte_pos_vars: dict = {}
         self._cap_pos_vars: dict = {}
@@ -345,6 +347,7 @@ class Editor(PanelsMixin, ApercuMixin, TimelineMixin,
                            ("+ Flèche", self._add_arrow),
                            ("+ Highlight", self._add_highlight),
                            ("+ Texte", self._add_texte),
+                           ("+ Zoom", self._add_zoom),
                            ("+ Sample", self._add_sample)):
             ttk.Button(self.tl_actions, text=_txt, command=_cmd).pack(
                 side="left", padx=3)

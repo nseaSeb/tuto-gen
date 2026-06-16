@@ -324,13 +324,32 @@ def _charger_logo(meta: Meta, taille: int) -> Image.Image:
     return _placeholder_logo(taille, meta.app, meta.couleur_accent)
 
 
+# Cache des captures décodées : éviter de re-décoder le PNG à chaque appel
+# (composition + zone_screenshot, et à chaque frame d'un zoom « capture » dans
+# l'aperçu). Clé = (chemin|None, mtime|titre, taille_zone). Borné en taille.
+_CAPTURE_CACHE: dict[tuple, Image.Image] = {}
+_CAPTURE_CACHE_MAX = 8
+
+
 def _charger_capture(chemin, titre: str, taille_zone) -> Image.Image:
     """Charge un fichier de capture (transparence préservée), ou un placeholder.
 
     Renvoie une image RGBA : les zones transparentes laisseront voir le fond de
-    la slide au moment du collage (au lieu d'un aplat noir)."""
+    la slide au moment du collage (au lieu d'un aplat noir). Le résultat n'est
+    jamais modifié en place par les appelants — il peut donc être mis en cache."""
     if chemin and Path(chemin).is_file():
-        return imaging.ouvrir(chemin).convert("RGBA")
+        try:
+            mtime = Path(chemin).stat().st_mtime_ns
+        except OSError:
+            mtime = 0
+        cle = (str(chemin), mtime, tuple(taille_zone))
+        img = _CAPTURE_CACHE.get(cle)
+        if img is None:
+            img = imaging.ouvrir(chemin).convert("RGBA")
+            if len(_CAPTURE_CACHE) >= _CAPTURE_CACHE_MAX:
+                _CAPTURE_CACHE.pop(next(iter(_CAPTURE_CACHE)))
+            _CAPTURE_CACHE[cle] = img
+        return img
     w = taille_zone[0]
     h = int(w * 9 / 16)
     return _placeholder_screenshot((w, h), titre).convert("RGBA")
@@ -611,6 +630,128 @@ def composer_scene(scene: Scene, meta: Meta, t: float = 0.0) -> Image.Image:
     if scene.type == "title":
         return _composer_title(scene, meta, t)
     return _composer_screenshot(scene, meta, t)
+
+
+def _smoothstep(x: float) -> float:
+    """Interpolation douce (ease-in-out) sur [0, 1]."""
+    x = max(0.0, min(1.0, x))
+    return x * x * (3.0 - 2.0 * x)
+
+
+def zoom_progression(zoom, t: float, duree: float) -> float:
+    """Avancement [0, 1] du zoom à l'instant `t` (0 = vue pleine, 1 = zone).
+
+    Rampe d'entrée (`entree` s) → maintien → rampe de sortie (`sortie` s) sur
+    la fenêtre [debut, fin]. Hors fenêtre : 0 (pas d'effet).
+    """
+    debut = zoom.debut
+    fin = zoom.fin if zoom.fin is not None else duree
+    span = fin - debut
+    if span <= 1e-6 or t <= debut or t >= fin:
+        return 0.0
+    local = t - debut
+    # Bornage : entrée + sortie ne peuvent dépasser la fenêtre.
+    in_d = max(0.0, zoom.entree)
+    out_d = max(0.0, zoom.sortie)
+    if in_d + out_d > span:
+        ratio = span / (in_d + out_d)
+        in_d *= ratio
+        out_d *= ratio
+    if in_d > 0 and local < in_d:
+        return _smoothstep(local / in_d)
+    if out_d > 0 and local > span - out_d:
+        return _smoothstep((span - local) / out_d)
+    return 1.0
+
+
+def _zoom_actif(scene: Scene, t: float, duree: float):
+    """Zoom le plus « avancé » à l'instant `t`, et son avancement (zoom, p)."""
+    best, best_p = None, 0.0
+    for z in (getattr(scene, "zooms", None) or []):
+        p = zoom_progression(z, t, duree)
+        if p > best_p:
+            best_p, best = p, z
+    return best, best_p
+
+
+def _cadrage_cible(base: tuple[float, float, float, float],
+                   zone: tuple[float, float, float, float]
+                   ) -> tuple[float, float, float, float]:
+    """Rectangle cible (px) dans `base`, à partir de `zone` (% de `base`).
+
+    Ramené au format de `base` (pas de déformation), la zone restant visible.
+    """
+    bx, by, bw, bh = base
+    x1, y1, x2, y2 = zone
+    zx1 = bx + min(x1, x2) / 100.0 * bw
+    zy1 = by + min(y1, y2) / 100.0 * bh
+    zx2 = bx + max(x1, x2) / 100.0 * bw
+    zy2 = by + max(y1, y2) / 100.0 * bh
+    cx, cy = (zx1 + zx2) / 2.0, (zy1 + zy2) / 2.0
+    zw = max(1.0, zx2 - zx1)
+    zh = max(1.0, zy2 - zy1)
+    ar = bw / bh
+    if zw / zh < ar:
+        zw = zh * ar
+    else:
+        zh = zw / ar
+    zw = min(zw, bw)
+    zh = min(zh, bh)
+    ox = min(max(cx - zw / 2.0, bx), bx + bw - zw)
+    oy = min(max(cy - zh / 2.0, by), by + bh - zh)
+    return (ox, oy, zw, zh)
+
+
+def zoom_transform(scene: Scene, meta: Meta, t: float, duree: float):
+    """Transformation du zoom actif à `t` : (src, dst) en pixels, ou None.
+
+    `src` = rectangle à recadrer dans l'image composée ; `dst` = rectangle où
+    recoller (après redimensionnement). En `cible="slide"`, dst = toute la
+    slide. En `cible="capture"`, dst = la zone du screenshot (le reste reste
+    fixe). None s'il n'y a aucun zoom actif.
+    """
+    z, p = _zoom_actif(scene, t, duree)
+    if z is None or p <= 0.0:
+        return None
+    W, H = meta.resolution
+    base = (0.0, 0.0, float(W), float(H))
+    if getattr(z, "cible", "slide") == "capture":
+        zs = zone_screenshot(scene, meta, t)
+        if zs is not None:
+            base = (float(zs[0]), float(zs[1]), float(zs[2]), float(zs[3]))
+    target = _cadrage_cible(base, z.zone)
+    # Interpole entre la vue pleine (base, p=0) et le cadrage cible (p=1).
+    src = tuple(b + (c - b) * p for b, c in zip(base, target))
+    dst = base
+    src = tuple(int(round(v)) for v in src)
+    dst = tuple(int(round(v)) for v in dst)
+    return (src, dst)
+
+
+def appliquer_zoom(img: Image.Image, src, dst) -> Image.Image:
+    """Recadre `img` sur `src`, redimensionne, puis recolle sur `dst`.
+
+    Si `dst` couvre toute l'image (zoom « slide »), renvoie le recadrage
+    redimensionné. Sinon (zoom « capture »), recolle le recadrage dans `dst`,
+    le reste de l'image restant inchangé.
+    """
+    sx, sy, sw, sh = src
+    dx, dy, dw, dh = dst
+    sx = max(0, min(sx, img.width - 1))
+    sy = max(0, min(sy, img.height - 1))
+    sw = max(1, min(sw, img.width - sx))
+    sh = max(1, min(sh, img.height - sy))
+    dw = max(1, dw)
+    dh = max(1, dh)
+    if (src, dst) == ((0, 0, img.width, img.height),
+                      (0, 0, img.width, img.height)):
+        return img
+    crop = img.crop((sx, sy, sx + sw, sy + sh)).resize((dw, dh), Image.LANCZOS)
+    if (dx, dy, dw, dh) == (0, 0, img.width, img.height):
+        return crop
+    out = img.copy()
+    out.paste(crop, (dx, dy))
+    return out
 
 
 def zone_screenshot(scene: Scene, meta: Meta,

@@ -31,6 +31,7 @@ class ApercuMixin:
         # changer sans que l'« état visible » (signature) bouge : on invalide
         # pour forcer un vrai rendu (le saut n'est utile qu'en lecture).
         self._apercu_sig = None
+        self._base_cache = None  # purge le cache d'image de base (zoom)
         if self._apercu_job:
             self.root.after_cancel(self._apercu_job)
             self._apercu_job = None
@@ -95,18 +96,70 @@ class ApercuMixin:
                 c.create_rectangle(x0, y0, x1, y1, outline="#FFD166", width=2,
                                    dash=(4, 3), tags="dragghost")
 
+    def _zoom_box(self):
+        """Repère (origine_x, origine_y, largeur, hauteur) en pixels-canvas où
+        s'expriment les % de la zone du zoom sélectionné : la capture
+        (cible « capture ») ou la slide entière (cible « slide »)."""
+        z = None
+        if self._sel and self._sel.get("kind") == "zoom" and self.current is not None:
+            s = self.scenes[self.current]
+            if self._sel["idx"] < len(s.zooms):
+                z = s.zooms[self._sel["idx"]]
+        if z is not None and getattr(z, "cible", "slide") == "capture" \
+                and self._shot_box:
+            return self._shot_box
+        if self._slide_disp:
+            ix, iy, ratio = self._slide_disp
+            W, H = self.meta.resolution
+            return (ix, iy, W * ratio, H * ratio)
+        return None
+
+    def _zoom_overlay(self, z):
+        """Trace la zone cible d'un zoom (rectangle pointillé) dans son repère."""
+        box = self._zoom_box()
+        if not box:
+            return
+        c = self.apercu_canvas
+        c.delete("zoomzone")
+        bx, by, bw, bh = box
+        zx1, zy1, zx2, zy2 = z.zone
+        x1 = bx + zx1 / 100.0 * bw
+        y1 = by + zy1 / 100.0 * bh
+        x2 = bx + zx2 / 100.0 * bw
+        y2 = by + zy2 / 100.0 * bh
+        cible = "capture" if getattr(z, "cible", "slide") == "capture" else "slide"
+        c.create_rectangle(x1, y1, x2, y2, outline="#46e0e0", width=2,
+                           dash=(5, 4), tags="zoomzone")
+        c.create_text(x1 + 4, y1 + 4, text=f"🔍 zoom ({cible})", anchor="nw",
+                      fill="#46e0e0", font=("Helvetica", 9, "bold"),
+                      tags="zoomzone")
+
     def _apercu_signature(self, s, t):
         """État visible de la slide à l'instant `t` (composite constant par
         paliers). Si la signature ne bouge pas, l'image rendue est identique :
         on peut sauter le composite Pillow. Inclut la taille du canvas (un
         redimensionnement change l'image affichée)."""
         cap = composer.capture_active(s, t)
+        # État du zoom : version LÉGÈRE (avancement seul, sans recharger la
+        # capture). Le cadrage exact dépend en plus de la capture active, déjà
+        # présente via `id(cap)` ci-dessus — inutile (et coûteux) d'appeler
+        # `zoom_transform`/`zone_screenshot` ici, à chaque frame de lecture.
+        # L'effet est TOUJOURS affiché (lecture comme scrub), même bloc zoom
+        # sélectionné ; la zone éditable n'apparaît qu'en vue pleine (p == 0).
+        zoom_sig = None
+        z, p = composer._zoom_actif(s, t, self._tl_duree())
+        if z is not None and p > 0.0:
+            zoom_sig = (id(z), round(p, 4), getattr(z, "cible", "slide"))
+        sel_zoom = (self._sel.get("idx")
+                    if self._sel and self._sel.get("kind") == "zoom" else None)
         return (
             self.current,
             id(cap) if cap is not None else None,
             composer.narration_active(s, t),
             tuple(id(a) for a in composer.annotations_actives(s, t)),
             tuple(id(tx) for tx in composer.textes_actifs(s, t)),
+            zoom_sig,
+            sel_zoom,
             self.apercu_canvas.winfo_width(),
             self.apercu_canvas.winfo_height(),
         )
@@ -132,8 +185,17 @@ class ApercuMixin:
         if sig == self._apercu_sig and self._tk_img is not None:
             return
         self._apercu_sig = sig
+        # Image de base (avant zoom) mise en cache : pendant un zoom seul le
+        # cadrage change d'une frame à l'autre — inutile de recomposer toute la
+        # slide. La clé exclut le cadrage du zoom ; le cache est purgé à chaque
+        # édition par `_plan_apercu`.
+        base_key = sig[:5]
         try:
-            img = composer.composer_scene(s, self.meta, t)
+            if self._base_cache and self._base_cache[0] == base_key:
+                img = self._base_cache[1]
+            else:
+                img = composer.composer_scene(s, self.meta, t)
+                self._base_cache = (base_key, img)
         except Exception as e:
             c.delete("all")
             c.create_text(10, 10, text=f"Aperçu indisponible :\n{e}",
@@ -141,7 +203,19 @@ class ApercuMixin:
             self._shot_box = None
             self._slide_disp = None
             self._apercu_sig = None  # retenter au prochain appel
+            self._base_cache = None
             return
+        # Zoom (caméra) : l'effet est toujours appliqué quand il est actif (p>0),
+        # y compris quand le bloc zoom est sélectionné. La zone éditable
+        # n'apparaît qu'en vue pleine (p == 0, donc tr is None), plus bas.
+        tr = None
+        try:
+            tr = composer.zoom_transform(s, self.meta, t, self._tl_duree())
+            if tr is not None:
+                img = composer.appliquer_zoom(img, *tr)
+        except Exception:
+            tr = None  # un zoom raté ne doit pas figer l'aperçu/la lecture
+
         cw = max(320, c.winfo_width() - 4)
         ch = max(180, c.winfo_height() - 4)
         ratio = min(cw / img.width, ch / img.height, 1.0)
@@ -153,6 +227,12 @@ class ApercuMixin:
         iy = max(0, (c.winfo_height() - dh) // 2)
         c.delete("all")
         c.create_image(ix, iy, image=self._tk_img, anchor="nw")
+        # Vue zoomée (lecture/scrub) : pas d'édition au pixel près → on n'arme
+        # pas le mapping de drag ni les repères.
+        if tr is not None:
+            self._slide_disp = None
+            self._shot_box = None
+            return
         self._slide_disp = (ix, iy, ratio)
 
         # Repères pointillés autour du titre / sous-titre (logo sur les slides
@@ -162,23 +242,31 @@ class ApercuMixin:
             c.create_rectangle(ix + x * ratio, iy + y * ratio,
                                ix + (x + bw) * ratio, iy + (y + bh) * ratio,
                                outline="#46a06a", width=1, dash=(4, 4))
+
         if s.type == "title":
             self._shot_box = None
-            return
-
-        zs = composer.zone_screenshot(s, self.meta, t)
-        if zs:
-            ox, oy, sw, sh = zs
-            bx = ix + int(ox * ratio)
-            by = iy + int(oy * ratio)
-            bw = int(sw * ratio)
-            bh = int(sh * ratio)
-            self._shot_box = (bx, by, bw, bh)
-            if self._sel and self._sel["kind"] in ("arrow", "highlight"):
-                c.create_rectangle(bx, by, bx + bw, by + bh,
-                                   outline="#FFD166", width=1, dash=(5, 4))
         else:
-            self._shot_box = None
+            zs = composer.zone_screenshot(s, self.meta, t)
+            if zs:
+                ox, oy, sw, sh = zs
+                bx = ix + int(ox * ratio)
+                by = iy + int(oy * ratio)
+                bw = int(sw * ratio)
+                bh = int(sh * ratio)
+                self._shot_box = (bx, by, bw, bh)
+                if self._sel and self._sel["kind"] in ("arrow", "highlight"):
+                    c.create_rectangle(bx, by, bx + bw, by + bh,
+                                       outline="#FFD166", width=1, dash=(5, 4))
+            else:
+                self._shot_box = None
+
+        # Zone cible du zoom sélectionné (déplaçable au drag) — tracée en
+        # dernier, après `_shot_box` (nécessaire pour la cible « capture »). On
+        # n'arrive ici qu'en vue pleine (tr is None) : l'effet n'est pas appliqué
+        # à cet instant, la zone est donc éditable directement.
+        if (self._sel and self._sel.get("kind") == "zoom"
+                and self._sel["idx"] < len(s.zooms)):
+            self._zoom_overlay(s.zooms[self._sel["idx"]])
 
     def _bornes_pct(self) -> tuple[float, float, float, float]:
         """Bornes (xmin, xmax, ymin, ymax) en % de la boîte capture
@@ -229,6 +317,11 @@ class ApercuMixin:
             self._cap_drag = {"idx": i, "sx": ev.x, "sy": ev.y,
                               "ox": cap.decalage_x, "oy": cap.decalage_y}
             return
+        # Zone de zoom sélectionnée : translation à la souris (% de slide).
+        if k == "zoom" and i < len(s.zooms) and self._slide_disp:
+            self._drag_zoom = {"idx": i, "sx": ev.x, "sy": ev.y,
+                               "orig_zone": s.zooms[i].zone}
+            return
         # Sinon : translation d'une flèche / highlight sélectionné (capture).
         if k not in ("arrow", "highlight") or i >= len(s.annotations):
             return
@@ -266,6 +359,24 @@ class ApercuMixin:
                 self._sync_cap_pos(cap)
                 self._draw_ghost()
             return
+        if self._drag_zoom and self.current is not None:
+            dz = self._drag_zoom
+            s = self.scenes[self.current]
+            box = self._zoom_box()
+            if box and dz["idx"] < len(s.zooms):
+                _bx, _by, bw, bh = box
+                z = s.zooms[dz["idx"]]
+                if bw > 0 and bh > 0:
+                    ddx = (ev.x - dz["sx"]) / bw * 100
+                    ddy = (ev.y - dz["sy"]) / bh * 100
+                    x0, y0, x1, y1 = dz["orig_zone"]
+                    dx = self._delta_borne(ddx, (x0, x1), 0.0, 100.0)
+                    dy = self._delta_borne(ddy, (y0, y1), 0.0, 100.0)
+                    z.zone = (round(x0 + dx, 1), round(y0 + dy, 1),
+                              round(x1 + dx, 1), round(y1 + dy, 1))
+                    self._sync_zoom_zone(z)
+                    self._zoom_overlay(z)
+            return
         if not self._drag_anno or self.current is None:
             return
         s = self.scenes[self.current]
@@ -293,13 +404,17 @@ class ApercuMixin:
         self._draw_ghost()
 
     def _ap_up(self, ev):
-        was_dragging = bool(self._free_drag or self._cap_drag or self._drag_anno)
+        was_dragging = bool(self._free_drag or self._cap_drag
+                            or self._drag_anno or self._drag_zoom)
         if self._free_drag:
             self._free_drag_move(ev)
             self._free_drag = None
         elif self._cap_drag:
             self._ap_move(ev)
             self._cap_drag = None
+        elif self._drag_zoom:
+            self._ap_move(ev)
+            self._drag_zoom = None
         else:
             self._ap_move(ev)
             self._drag_anno = None
@@ -315,6 +430,18 @@ class ApercuMixin:
         self._chargement = True
         try:
             v["x"].set(f"{cap.decalage_x:.0f}"); v["y"].set(f"{cap.decalage_y:.0f}")
+        finally:
+            self._chargement = False
+
+    def _sync_zoom_zone(self, z):
+        """Reporte la zone (drag) dans les champs du panneau Zoom."""
+        v = getattr(self, "_zoom_vars", None)
+        if not v:
+            return
+        self._chargement = True
+        try:
+            v["x1"].set(f"{z.zone[0]:.1f}"); v["y1"].set(f"{z.zone[1]:.1f}")
+            v["x2"].set(f"{z.zone[2]:.1f}"); v["y2"].set(f"{z.zone[3]:.1f}")
         finally:
             self._chargement = False
 
@@ -340,9 +467,9 @@ class ApercuMixin:
             s = self.scenes[self.current]
             if self._hit_libre(ev, s):
                 cursor = self._move_cursor()
-            elif (self._sel and self._sel["kind"] in ("arrow", "highlight")
+            elif (self._sel and self._sel["kind"] in ("arrow", "highlight", "zoom")
                     and self._dans_slide(ev)):
-                # Flèche/highlight sélectionné : déplaçable partout sur la slide.
+                # Flèche/highlight/zoom sélectionné : déplaçable sur la slide.
                 cursor = self._move_cursor()
         if self.apercu_canvas["cursor"] != cursor:
             self.apercu_canvas.config(cursor=cursor)

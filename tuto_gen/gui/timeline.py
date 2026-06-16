@@ -74,6 +74,10 @@ class TimelineMixin:
             tracks.append({"kind": "texte", "idx": i,
                            "label": f"Texte : {apercu}",
                            "color": COUL["texte"], "resizable": "both"})
+        for i, _z in enumerate(s.zooms):
+            tracks.append({"kind": "zoom", "idx": i,
+                           "label": f"Zoom {i + 1}",
+                           "color": COUL["zoom"], "resizable": "both"})
         for j, sa in enumerate(s.samples):
             nm = Path(sa.chemin).name if sa.chemin else f"Sample {j+1}"
             if len(nm) > 14:
@@ -218,6 +222,9 @@ class TimelineMixin:
         if k == "texte":
             tx = s.textes[i]
             return (tx.debut, tx.fin if tx.fin is not None else d)
+        if k == "zoom":
+            z = s.zooms[i]
+            return (z.debut, z.fin if z.fin is not None else d)
         if k == "sample":
             sa = s.samples[i]
             file_end = sa.debut + self._sample_dur(sa.chemin)
@@ -403,7 +410,8 @@ class TimelineMixin:
         k, i, part = hit["kind"], hit["idx"], hit["part"]
 
         self._sel = {"kind": k, "idx": i}
-        can_del = k in ("narration", "capture", "arrow", "highlight", "sample")
+        can_del = k in ("narration", "capture", "arrow", "highlight",
+                        "sample", "zoom")
         self.btn_del.config(state="normal" if can_del else "disabled")
         self._build_settings()
         self._plan_apercu()
@@ -493,6 +501,8 @@ class TimelineMixin:
                 return s.annotations[idx]
             if kind == "texte":
                 return s.textes[idx]
+            if kind == "zoom":
+                return s.zooms[idx]
             if kind == "sample":
                 return s.samples[idx]
         except IndexError:
@@ -611,6 +621,21 @@ class TimelineMixin:
             debut=self._preview_t))
         self._select_new("texte", len(s.textes) - 1)
 
+    def _add_zoom(self):
+        """Ajoute un mouvement de zoom (caméra sur toute la slide)."""
+        if self.current is None:
+            return
+        s = self.scenes[self.current]
+        debut = self._preview_t
+        # Fenêtre par défaut de 3 s (ou jusqu'à la fin de la scène si plus court).
+        d = self._tl_duree()
+        fin = round(min(debut + 3.0, d), 2) if d > debut else None
+        # Sur une scène capture, on zoome par défaut sur le screenshot.
+        cible = "capture" if s.type == "screenshot" else "slide"
+        s.zooms.append(config.Zoom(zone=(25.0, 25.0, 75.0, 75.0),
+                                   debut=debut, fin=fin, cible=cible))
+        self._select_new("zoom", len(s.zooms) - 1)
+
     def _add_arrow(self):
         s = self._exige_screenshot("Une flèche")
         if s is None:
@@ -682,7 +707,7 @@ class TimelineMixin:
         listes = {
             "narration": s.narrations, "capture": s.captures,
             "arrow": s.annotations, "highlight": s.annotations,
-            "sample": s.samples, "texte": s.textes,
+            "sample": s.samples, "texte": s.textes, "zoom": s.zooms,
         }
         lst = listes.get(k)
         if lst is None or not (0 <= i < len(lst)):

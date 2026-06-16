@@ -128,6 +128,31 @@ class TexteLibre:
 
 
 @dataclass
+class Zoom:
+    """Mouvement de caméra : zoom progressif sur une zone de la slide.
+
+    `zone` est le cadrage *cible* (entièrement zoomé) [x1, y1, x2, y2], en % de
+    la **slide** (`cible="slide"`) ou de la **capture** (`cible="capture"`).
+    L'effet occupe la fenêtre [debut, fin] de la scène : rampe d'entrée de
+    `entree` s (vue pleine → zone), maintien sur la zone, puis rampe de sortie
+    de `sortie` s (zone → vue pleine). Le cadrage est automatiquement ramené au
+    format de la cible pour éviter toute déformation : la zone reste toujours
+    entièrement visible.
+
+    `cible="slide"` : caméra sur toute l'image composée (capture + textes +
+    flèches). `cible="capture"` : seul le screenshot est zoomé, le reste de la
+    slide (titre, sous-titre, logo, footer) reste fixe par-dessus.
+    """
+
+    zone: tuple[float, float, float, float] = (25.0, 25.0, 75.0, 75.0)
+    debut: float = 0.0
+    fin: float | None = None  # None = jusqu'à la fin de la scène
+    entree: float = 0.6       # durée (s) de la rampe d'entrée (vue → zone)
+    sortie: float = 0.6       # durée (s) de la rampe de sortie (zone → vue)
+    cible: str = "slide"      # "slide" (toute la slide) | "capture"
+
+
+@dataclass
 class SampleAudio:
     """Un fichier audio joué à un instant précis dans une scène."""
 
@@ -162,6 +187,7 @@ class Scene:
     annotations: list[Annotation] = field(default_factory=list)
     samples: list[SampleAudio] = field(default_factory=list)
     textes: list[TexteLibre] = field(default_factory=list)
+    zooms: list[Zoom] = field(default_factory=list)
 
     # -- Accès « legacy » pratiques (premier élément) --------------------
     @property
@@ -398,6 +424,18 @@ def charger(chemin_yaml: str | Path) -> Config:
             for tx in (s.get("textes") or [])
         ]
 
+        zooms = [
+            Zoom(
+                zone=tuple(z["zone"]) if z.get("zone") else (25.0, 25.0, 75.0, 75.0),
+                debut=float(z.get("debut", 0.0)),
+                fin=_fin_or_none(z.get("fin")),
+                entree=float(z.get("entree", 0.6)),
+                sortie=float(z.get("sortie", 0.6)),
+                cible=str(z.get("cible", "slide")),
+            )
+            for z in (s.get("zooms") or [])
+        ]
+
         dpos = DEF_POS.get(stype, DEF_POS["title"])
         dlogo = DEF_LOGO.get(stype, DEF_LOGO["title"])
         scenes.append(Scene(
@@ -418,6 +456,7 @@ def charger(chemin_yaml: str | Path) -> Config:
             annotations=annotations,
             samples=samples,
             textes=textes,
+            zooms=zooms,
         ))
 
     return Config(meta=meta, scenes=scenes, base_dir=base_dir)
@@ -558,6 +597,15 @@ def vers_dict(cfg: Config, base_dir: Path | None = None) -> dict:
                  "largeur": tx.largeur, "debut": tx.debut,
                  **({"fin": tx.fin} if tx.fin is not None else {})}
                 for tx in s.textes
+            ]
+        if s.zooms:
+            d["zooms"] = [
+                {"zone": [round(v, 1) for v in z.zone], "debut": z.debut,
+                 **({"fin": z.fin} if z.fin is not None else {}),
+                 **({"entree": round(z.entree, 2)} if z.entree != 0.6 else {}),
+                 **({"sortie": round(z.sortie, 2)} if z.sortie != 0.6 else {}),
+                 **({"cible": z.cible} if z.cible != "slide" else {})}
+                for z in s.zooms
             ]
         scenes.append(d)
     return {"meta": meta, "scenes": scenes}

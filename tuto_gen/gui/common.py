@@ -24,6 +24,7 @@ COUL = {
     "highlight": "#FFD166",
     "sample": "#5a4f9f",
     "texte": "#9f5a8a",
+    "zoom": "#1f8a8a",
     "scene_dur": "#3a3a6a",
 }
 

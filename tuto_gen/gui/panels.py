@@ -34,6 +34,7 @@ class PanelsMixin:
         self._narr_dur_maj = None  # rafraîchisseur des durées (panneau narration)
         self._arrow_vars = {}
         self._hl_vars = {}
+        self._zoom_vars = {}
         self._timing_vars = {}
         self._title_pos_vars = {}
         self._texte_pos_vars = {}
@@ -55,6 +56,7 @@ class PanelsMixin:
             "highlight": self._panel_highlight,
             "sample": self._panel_sample,
             "texte": self._panel_texte,
+            "zoom": self._panel_zoom,
         }
         fn = dispatch.get(k)
         if fn:
@@ -1045,6 +1047,99 @@ class PanelsMixin:
             a.fin = _parse_fin(fv.get())
             self._preview_t = a.debut
         self._timing_section(a.debut, a.fin, _timing_cb)
+        self._sdel()
+
+    def _panel_zoom(self, s: config.Scene, idx: int):
+        if idx >= len(s.zooms):
+            return
+        z = s.zooms[idx]
+        # Aperçu calé au milieu de la fenêtre : l'effet zoomé est visible
+        # immédiatement à la sélection. Pour repositionner la zone, ramener le
+        # curseur au début de la fenêtre (vue pleine) : la zone éditable
+        # (rectangle cyan) réapparaît.
+        duree = self._tl_duree()
+        fin = z.fin if z.fin is not None else duree
+        self._preview_t = round(z.debut + max(0.0, fin - z.debut) / 2.0, 2)
+        self._stitle(f"Zoom {idx + 1}")
+
+        # Cible : toute la slide (caméra) ou seulement la capture.
+        cible_var = tk.StringVar(value=getattr(z, "cible", "slide"))
+        row = self._srow("Cible :")
+        ttk.Radiobutton(row, text="Slide", value="slide",
+                        variable=cible_var).pack(side="left")
+        ttk.Radiobutton(row, text="Capture", value="capture",
+                        variable=cible_var).pack(side="left", padx=(8, 0))
+
+        def _cible(*_):
+            if self._chargement:
+                return
+            z.cible = cible_var.get()
+            # Le repère des % change (slide ↔ capture) : on reconstruit le
+            # panneau et on rafraîchit l'aperçu.
+            self._build_settings()
+            self._plan_apercu()
+            self._draw_timeline()
+        cible_var.trace_add("write", _cible)
+
+        if z.cible == "capture":
+            self._sh("Zoom sur le screenshot seul (titre, footer et logo "
+                     "restent fixes). Coordonnées en % de la capture.", fg="#555")
+            if s.type != "screenshot":
+                self._sh("⚠ Cette scène n'a pas de capture : l'effet retombe "
+                         "sur toute la slide.", fg="#c9a06a")
+        else:
+            self._sh("Caméra sur toute la slide. Coordonnées en % de la slide.",
+                     fg="#555")
+        self._sh("Curseur au début de la fenêtre = vue pleine + zone éditable "
+                 "(rectangle cyan, déplaçable au drag). Plus loin = aperçu de "
+                 "l'effet zoomé.", fg="#46a0a0")
+        self._ssep()
+        zz = z.zone or (25.0, 25.0, 75.0, 75.0)
+        x1 = tk.StringVar(value=f"{zz[0]:.1f}")
+        y1 = tk.StringVar(value=f"{zz[1]:.1f}")
+        x2 = tk.StringVar(value=f"{zz[2]:.1f}")
+        y2 = tk.StringVar(value=f"{zz[3]:.1f}")
+        self._s2fields("Coin H-G (%)", "x", x1, "y", y1)
+        self._s2fields("Coin B-D (%)", "x", x2, "y", y2)
+
+        def _m(*_):
+            if not self._chargement:
+                z.zone = (_to_float(x1.get()), _to_float(y1.get()),
+                          _to_float(x2.get()), _to_float(y2.get()))
+                self._plan_apercu()
+        for v in (x1, y1, x2, y2):
+            v.trace_add("write", _m)
+        self._zoom_vars = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+
+        # Rampes d'entrée / sortie (la durée restante = temps zoomé maintenu).
+        self._ssep()
+        tk.Label(self.settings_inner, text="Rampes (s)", bg="#141414",
+                 fg="#aaa", font=("Helvetica", 10, "bold")).pack(
+            anchor="w", padx=6)
+        ev = tk.DoubleVar(value=round(z.entree, 2))
+        sv = tk.DoubleVar(value=round(z.sortie, 2))
+        self._sscale("Entrée :", ev, lo=0.0, hi=5.0, res=0.01)
+        self._sscale("Sortie :", sv, lo=0.0, hi=5.0, res=0.01)
+        tk.Label(self.settings_inner,
+                 text="Entrée = vue pleine → zone · Sortie = zone → vue pleine. "
+                      "Le reste de la fenêtre = temps maintenu zoomé.",
+                 bg="#141414", fg="#444", font=("Helvetica", 8),
+                 wraplength=SETTINGS_W - 20, justify="left").pack(
+            anchor="w", padx=6, pady=(0, 2))
+
+        def _r(*_):
+            if not self._chargement:
+                z.entree = round(ev.get(), 2)
+                z.sortie = round(sv.get(), 2)
+                self._plan_apercu()
+        ev.trace_add("write", _r)
+        sv.trace_add("write", _r)
+
+        def _timing_cb(dv, fv):
+            z.debut = max(0.0, _to_float(dv.get()))
+            z.fin = _parse_fin(fv.get())
+            self._preview_t = z.debut
+        self._timing_section(z.debut, z.fin, _timing_cb)
         self._sdel()
 
     def _panel_sample(self, s: config.Scene, idx: int):
